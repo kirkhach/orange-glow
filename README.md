@@ -83,3 +83,51 @@ Double-click `launch_glow.bat`, or run:
 2. Delete this folder
 
 If you only delete the folder, the hooks will silently fail with no errors or slowdowns.
+
+---
+
+## Fork additions
+
+This fork adds two things on top of the upstream project. All credit for the core
+daemon/indicator goes to the original author ([vasudhah-arch/orange-glow](https://github.com/vasudhah-arch/orange-glow)).
+
+### 1. Inverted mode — glow = "your move"
+
+Instead of glowing *while* Claude works, you can flip it so the glow means **Claude is
+done or waiting on you**, and it clears the moment you re-engage. Use these hooks in
+`~/.claude/settings.json` (replace `C:/path/to/orange-glow` with your folder, and prefer
+`pythonw.exe` over `python.exe` to avoid console flashes):
+
+```json
+{
+  "hooks": {
+    "Stop":             [ { "matcher": "", "hooks": [ { "type": "command", "command": "\"C:/path/to/orange-glow/.venv/Scripts/pythonw.exe\" \"C:/path/to/orange-glow/glow_show.py\"" } ] } ],
+    "Notification":     [ { "matcher": "", "hooks": [ { "type": "command", "command": "\"C:/path/to/orange-glow/.venv/Scripts/pythonw.exe\" \"C:/path/to/orange-glow/glow_show.py\"" } ] } ],
+    "UserPromptSubmit": [ { "matcher": "", "hooks": [ { "type": "command", "command": "\"C:/path/to/orange-glow/.venv/Scripts/pythonw.exe\" \"C:/path/to/orange-glow/glow_hide.py\"" } ] } ],
+    "PreToolUse":       [ { "matcher": "", "hooks": [ { "type": "command", "command": "\"C:/path/to/orange-glow/.venv/Scripts/pythonw.exe\" \"C:/path/to/orange-glow/glow_hide.py\"" } ] } ]
+  }
+}
+```
+
+### 2. Cowork notification watcher (`glow_cowork_watcher.py`)
+
+Autonomous (cloud) Cowork sessions run in a remote VM, so their hooks can't reach the
+local glow pipe. This watcher instead reads the **Windows notification database**
+(read-only) and lights the glow whenever the Claude desktop app raises a notification
+("task done / needs input"), clearing it once you dismiss the notification. No extra
+dependencies beyond `pywin32`.
+
+```powershell
+# one-off checks
+.venv\Scripts\python.exe glow_cowork_watcher.py --discover    # list current Claude notifications
+.venv\Scripts\python.exe glow_cowork_watcher.py --self-test   # toggle the glow to test the pipe
+
+# run it (windowless), alongside launch_glow.bat
+launch_cowork_watcher.bat
+```
+
+Tunables live at the top of `glow_cowork_watcher.py` (`POLL_SECONDS`, `MAX_PERSIST_SECONDS`, `APP_MATCH`).
+
+> Note: the watcher keys off any Claude desktop notification, so it can't perfectly
+> distinguish a Cowork "your move" from other Claude toasts — but in practice those
+> notifications are the your-move moments.
