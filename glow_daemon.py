@@ -17,8 +17,12 @@ HOTKEY = "ctrl+shift+g"
 # After a manual click-dismiss, ignore "show" requests for this many seconds so a
 # stuck/repeated signal doesn't immediately bring the glow back.
 DISMISS_SUPPRESS_SECONDS = 4
-# Size of the clickable dismiss hit-area (top-left corner of the glow), in pixels.
+# Size of the clickable dismiss hit-area (top-right corner of the glow), in pixels.
 DISMISS_HIT = 26
+# Toggle feedback flash (Ctrl+Shift+G): briefly fill the box to confirm the new state.
+FLASH_MS = 900
+FLASH_ON_COLOR = "#2ecc40"   # green = now enabled
+FLASH_OFF_COLOR = "#e03b3b"  # red   = now muted
 
 # Gradient stops: (position 0..1, hex color)
 GRADIENT = [
@@ -62,6 +66,8 @@ class GlowDaemon:
         self.pulse_dir = 1
         self.pulse_alpha = PULSE_MAX
         self.suppress_until = 0.0
+        self.flashing = False
+        self._flash_after = None
         self._setup_window()
         self._setup_hotkey()
         self._start_pipe_listener()
@@ -113,11 +119,11 @@ class GlowDaemon:
         self.enabled = not self.enabled
         state = "ENABLED" if self.enabled else "DISABLED"
         print(f"[orange-glow] {state} (Ctrl+Shift+G)", flush=True)
-        if not self.enabled:
-            self.root.after(0, self._hide)
+        color = FLASH_ON_COLOR if self.enabled else FLASH_OFF_COLOR
+        self.root.after(0, lambda: self._flash(color))
 
     def _show(self):
-        if not self.enabled or self.visible:
+        if not self.enabled or self.visible or self.flashing:
             return
         if time.time() < self.suppress_until:
             return
@@ -136,6 +142,27 @@ class GlowDaemon:
         self._hide()
         print("[orange-glow] dismissed via x (suppressed "
               f"{DISMISS_SUPPRESS_SECONDS}s)", flush=True)
+
+    def _flash(self, color):
+        # Brief solid-color confirmation of a Ctrl+Shift+G toggle:
+        # green = now enabled, red = now muted. Overrides the normal glow briefly.
+        self.flashing = True
+        self.visible = False  # halt any running pulse loop
+        if self._flash_after is not None:
+            self.root.after_cancel(self._flash_after)
+        self.canvas.delete("flash")
+        self.canvas.create_rectangle(0, 0, GLOW_WIDTH, GLOW_HEIGHT,
+                                     fill=color, outline="", tags=("flash",))
+        self.root.attributes("-alpha", 1.0)
+        self.root.deiconify()
+        self._flash_after = self.root.after(FLASH_MS, self._end_flash)
+
+    def _end_flash(self):
+        self.canvas.delete("flash")
+        self._flash_after = None
+        self.flashing = False
+        self.pulse_alpha = PULSE_MAX
+        self.root.withdraw()
 
     def _hide(self):
         if not self.visible:
