@@ -134,14 +134,15 @@ def run(verbose=False):
         rows = query_claude_notifications()
         if rows is not None:
             cur_ids = set(r[0] for r in rows)
-            arrivals = dict(rows)
 
+            new_arrived = False
             # New notifications that arrived after we started.
             for nid, arrival in rows:
                 if nid not in seen:
                     seen.add(nid)
                     if nid > baseline_max_id and arrival >= start_ft:
                         active[nid] = arrival
+                        new_arrived = True
                         if verbose:
                             print(f"[watcher] new notification id={nid}", flush=True)
 
@@ -160,7 +161,9 @@ def run(verbose=False):
                         print(f"[watcher] notification id={nid} aged out", flush=True)
 
             desired_on = len(active) > 0
-            if desired_on and not glow_on:
+            # Re-send "show" on every NEW your-move notification (not just the first),
+            # so the glow re-arms even if the daemon was restarted since the last show.
+            if new_arrived and desired_on:
                 send_pipe("show", verbose=verbose)
                 glow_on = True
             elif not desired_on and glow_on:
