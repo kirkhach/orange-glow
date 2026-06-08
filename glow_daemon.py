@@ -1,6 +1,7 @@
 import tkinter as tk
 import threading
 import sys
+import time
 import win32pipe
 import win32file
 import pywintypes
@@ -13,6 +14,11 @@ PULSE_MAX = 1.0
 PULSE_STEP = 0.03
 PULSE_INTERVAL_MS = 40
 HOTKEY = "ctrl+shift+g"
+# After a manual click-dismiss, ignore "show" requests for this many seconds so a
+# stuck/repeated signal doesn't immediately bring the glow back.
+DISMISS_SUPPRESS_SECONDS = 4
+# Size of the clickable dismiss hit-area (top-left corner of the glow), in pixels.
+DISMISS_HIT = 26
 
 # Gradient stops: (position 0..1, hex color)
 GRADIENT = [
@@ -55,6 +61,7 @@ class GlowDaemon:
         self.visible = False
         self.pulse_dir = 1
         self.pulse_alpha = PULSE_MAX
+        self.suppress_until = 0.0
         self._setup_window()
         self._setup_hotkey()
         self._start_pipe_listener()
@@ -82,6 +89,17 @@ class GlowDaemon:
         for x, color in enumerate(h_colors):
             self.canvas.create_line(x, 0, x, GLOW_HEIGHT, fill=color)
 
+        # Small dismiss button in the top-right corner. The glow fades to the
+        # window's transparent color on the right, so we draw a solid amber chip
+        # as a backing — that makes the x both visible and reliably clickable.
+        r = 11
+        cx, cy = GLOW_WIDTH - 12, 12
+        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                fill="#E8780A", outline="")
+        self.canvas.create_text(cx, cy, text="×", fill="#0a0a0a",
+                                font=("Segoe UI", 11, "bold"))
+        self.canvas.bind("<Button-1>", self._on_click)
+
         root.withdraw()
 
     def _setup_hotkey(self):
@@ -101,10 +119,23 @@ class GlowDaemon:
     def _show(self):
         if not self.enabled or self.visible:
             return
+        if time.time() < self.suppress_until:
+            return
         self.visible = True
         self.pulse_alpha = PULSE_MAX
         self.root.deiconify()
         self._pulse()
+
+    def _on_click(self, event):
+        # The top-right corner acts as a dismiss button.
+        if event.x >= GLOW_WIDTH - DISMISS_HIT and event.y <= DISMISS_HIT:
+            self._dismiss()
+
+    def _dismiss(self):
+        self.suppress_until = time.time() + DISMISS_SUPPRESS_SECONDS
+        self._hide()
+        print("[orange-glow] dismissed via x (suppressed "
+              f"{DISMISS_SUPPRESS_SECONDS}s)", flush=True)
 
     def _hide(self):
         if not self.visible:

@@ -104,6 +104,7 @@ Startup folder. Press `Win+R`, run `shell:startup`, and create shortcuts pointin
 |---|---|
 | Start the glow daemon | Double-click `launch_glow.bat` |
 | Start the Cowork watcher | Double-click `launch_cowork_watcher.bat` |
+| Dismiss the glow now | Click the **×** in the box's top-right corner (hides it, with a brief cooldown) |
 | Disable when distracting | `Ctrl+Shift+G` (toggles on/off) |
 | Re-enable | `Ctrl+Shift+G` again |
 | Stop completely | Close the daemon / watcher task |
